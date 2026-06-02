@@ -526,19 +526,17 @@ async def cmd_debug(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         lines.append(f"\n❌ Склады: {e}")
 
-    # Loss metadata / attributes
+    # Loss attributes
     try:
-        data = await moysklad._get('/entity/loss/metadata')
-        attrs = data.get('attributes', [])
-        if isinstance(attrs, dict):
-            attrs = attrs.get('rows', [])
+        data = await moysklad._get('/entity/loss/metadata/attributes', limit=100)
+        attrs = data.get('rows', [])
         lines.append(f"\n✅ Атрибуты списания ({len(attrs)}):")
         for a in attrs:
             lines.append(f"  — {a.get('name', '?')} [type={a.get('type', '?')}]")
         if not attrs:
             lines.append("  (пусто — нет атрибутов или нет прав)")
     except Exception as e:
-        lines.append(f"\n❌ Метаданные списания: {e}")
+        lines.append(f"\n❌ Атрибуты списания: {e}")
 
     await update.message.reply_text("\n".join(lines), parse_mode='HTML')
 
