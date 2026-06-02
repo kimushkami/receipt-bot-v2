@@ -85,15 +85,14 @@ async def create_loss(
         'organization': {'meta': {'href': org_href, 'type': 'organization', 'mediaType': 'application/json'}},
         'store':        {'meta': {'href': store_href, 'type': 'store', 'mediaType': 'application/json'}},
         'moment': moment,
-    if expense_href:
-        body['expenseItem'] = {'meta': {'href': expense_href, 'type': 'expensearticle', 'mediaType': 'application/json'}}
-    body.update({
         'attributes': [{
             'meta':  {'href': shop_attr_href, 'type': 'attributemetadata', 'mediaType': 'application/json'},
             'value': {'meta': {'href': shop_val_href, 'mediaType': 'application/json'}},
         }],
         'positions': [],
-    })
+    }
+    if expense_href:
+        body['expenseItem'] = {'meta': {'href': expense_href, 'type': 'expensearticle', 'mediaType': 'application/json'}}
     for p in positions:
         if not p.get('product_href'):
             continue
