@@ -541,13 +541,17 @@ async def cmd_debug(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # Barcode search test
     test_barcode = '1001517900008'
     try:
-        data = await moysklad._get('/entity/assortment', filter=f'barcode={test_barcode}', limit=5)
-        rows = data.get('rows', [])
-        lines.append(f"\n🔎 Поиск баркода {test_barcode}: найдено {len(rows)} шт.")
-        for r in rows:
-            lines.append(f"  — {r.get('name', '?')} [{r.get('meta', {}).get('type', '?')}]")
-        if not rows:
-            lines.append("  (не найден — проверь баркод в МоёмСкладе)")
+        found = None
+        for flt_name, flt in (('barcode', f'barcode={test_barcode}'), ('code', f'code={test_barcode}')):
+            data = await moysklad._get('/entity/assortment', filter=flt, limit=5)
+            rows = data.get('rows', [])
+            lines.append(f"\n🔎 Поиск по {flt_name}={test_barcode}: {len(rows)} шт.")
+            for r in rows:
+                lines.append(f"  — {r.get('name', '?')}")
+            if rows and not found:
+                found = rows[0]
+        if not found:
+            lines.append("  ⚠️ Не найден ни по barcode, ни по code")
     except Exception as e:
         lines.append(f"\n❌ Поиск по баркоду: {e}")
 
