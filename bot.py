@@ -152,7 +152,14 @@ async def cmd_settings(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def _setup_start_org(msg, ud: dict):
-    orgs = await moysklad.get_organizations()
+    try:
+        orgs = await moysklad.get_organizations()
+    except Exception as e:
+        await msg.reply_text(f"❌ Ошибка подключения к МоёмуСкладу:\n<code>{e}</code>", parse_mode='HTML')
+        return
+    if not orgs:
+        await msg.reply_text("❌ Организации не найдены. Проверьте MOYSKLAD_TOKEN.")
+        return
     ud['_orgs'] = {o['id']: o for o in orgs}
     await msg.reply_text("⚙️ Настройка профиля\n\nВыберите организацию:", reply_markup=_kb(orgs, 'org'))
     set_st(ud, 'setup_org')
