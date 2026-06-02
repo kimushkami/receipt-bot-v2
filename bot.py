@@ -303,14 +303,8 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 exp = next((a for a in articles if 'списани' in a['name'].lower()), articles[0] if articles else None)
                 if exp:
                     storage.upsert_user(uid, expense_name=exp['name'], expense_href=exp['meta']['href'])
-            except Exception as e:
-                logger.error(f"Expense articles error: {e}")
-                await q.edit_message_text(
-                    f"❌ Ошибка загрузки статей расходов:\n<code>{e}</code>\n\n"
-                    f"Проверьте доступ к разделу Справочники в роли пользователя.",
-                    parse_mode='HTML'
-                )
-                return
+            except Exception:
+                pass  # статьи расходов недоступны на данном тарифе
         profile = storage.get_user(uid)
         ud['profile'] = profile
         await q.edit_message_text(
