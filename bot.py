@@ -155,10 +155,21 @@ async def _setup_start_org(msg, ud: dict):
     try:
         orgs = await moysklad.get_organizations()
     except Exception as e:
-        await msg.reply_text(f"❌ Ошибка подключения к МоёмуСкладу:\n<code>{e}</code>", parse_mode='HTML')
+        await msg.reply_text(
+            f"❌ Ошибка подключения к МоёмуСкладу:\n<code>{e}</code>\n\n"
+            f"Проверьте MOYSKLAD_TOKEN в переменных Railway.",
+            parse_mode='HTML'
+        )
         return
     if not orgs:
-        await msg.reply_text("❌ Организации не найдены. Проверьте MOYSKLAD_TOKEN.")
+        await msg.reply_text(
+            "❌ Организации не найдены.\n\n"
+            "Возможные причины:\n"
+            "— Токен создан под пользователем без роли Администратор\n"
+            "— Токен скопирован с пробелом или переносом строки\n\n"
+            "Проверьте роль пользователя в МоёмСкладе:\n"
+            "Настройки → Управление доступом → Роли"
+        )
         return
     ud['_orgs'] = {o['id']: o for o in orgs}
     await msg.reply_text("⚙️ Настройка профиля\n\nВыберите организацию:", reply_markup=_kb(orgs, 'org'))
