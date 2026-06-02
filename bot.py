@@ -503,6 +503,46 @@ async def _create_document(msg, ud: dict, uid: int):
         set_st(ud, 'idle')
 
 
+# ── DEBUG ─────────────────────────────────────────────────────────────────────
+
+async def cmd_debug(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    lines = ["🔍 <b>Диагностика МоёгоСклада</b>\n"]
+
+    # Organizations
+    try:
+        orgs = await moysklad.get_organizations()
+        lines.append(f"✅ Организации ({len(orgs)}):")
+        for o in orgs[:5]:
+            lines.append(f"  — {o.get('name', '?')}")
+    except Exception as e:
+        lines.append(f"❌ Организации: {e}")
+
+    # Stores
+    try:
+        stores = await moysklad.get_stores()
+        lines.append(f"\n✅ Склады ({len(stores)}):")
+        for s in stores[:5]:
+            lines.append(f"  — {s.get('name', '?')}")
+    except Exception as e:
+        lines.append(f"\n❌ Склады: {e}")
+
+    # Loss metadata / attributes
+    try:
+        data = await moysklad._get('/entity/loss/metadata')
+        attrs = data.get('attributes', [])
+        if isinstance(attrs, dict):
+            attrs = attrs.get('rows', [])
+        lines.append(f"\n✅ Атрибуты списания ({len(attrs)}):")
+        for a in attrs:
+            lines.append(f"  — {a.get('name', '?')} [type={a.get('type', '?')}]")
+        if not attrs:
+            lines.append("  (пусто — нет атрибутов или нет прав)")
+    except Exception as e:
+        lines.append(f"\n❌ Метаданные списания: {e}")
+
+    await update.message.reply_text("\n".join(lines), parse_mode='HTML')
+
+
 # ── MAIN ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -512,6 +552,7 @@ def main():
     app = Application.builder().token(TELEGRAM_TOKEN).build()
     app.add_handler(CommandHandler('start', cmd_start))
     app.add_handler(CommandHandler('settings', cmd_settings))
+    app.add_handler(CommandHandler('debug', cmd_debug))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(CallbackQueryHandler(handle_callback))
