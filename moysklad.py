@@ -66,9 +66,12 @@ async def get_custom_entity_values(meta_href: str) -> list[dict]:
 
 async def find_by_barcode(barcode: str) -> Optional[dict]:
     try:
-        data = await _get('/entity/assortment', filter=f'barcode={barcode}', limit=5)
-        rows = data.get('rows', [])
-        return rows[0] if rows else None
+        for flt in (f'barcode={barcode}', f'code={barcode}'):
+            data = await _get('/entity/assortment', filter=flt, limit=5)
+            rows = data.get('rows', [])
+            if rows:
+                return rows[0]
+        return None
     except Exception:
         return None
 
