@@ -45,15 +45,18 @@ async def get_expense_articles() -> list[dict]:
     return (await _get('/entity/expensearticle', limit=100))['rows']
 
 
-async def get_loss_shop_type_attr() -> Optional[dict]:
+async def get_loss_shop_type_attr() -> tuple[Optional[dict], list[str]]:
+    """Returns (attr, all_attr_names). attr is None if not found."""
     data = await _get('/entity/loss/metadata')
     attrs = data.get('attributes', [])
     if isinstance(attrs, dict):
         attrs = attrs.get('rows', [])
+    names = [a.get('name', '') for a in attrs]
+    logger.info(f"Loss attributes: {names}")
     for attr in attrs:
         if 'магазин' in attr.get('name', '').lower():
-            return attr
-    return None
+            return attr, names
+    return None, names
 
 
 async def get_custom_entity_values(meta_href: str) -> list[dict]:
