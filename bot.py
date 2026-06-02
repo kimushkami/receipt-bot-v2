@@ -228,16 +228,23 @@ async def _do_analyze(msg, bot, ud: dict, images: list[bytes]):
     ud['receipt_data'] = data
 
     try:
-        attr = await moysklad.get_loss_shop_type_attr()
+        attr, attr_names = await moysklad.get_loss_shop_type_attr()
         if not attr:
-            raise ValueError("Атрибут 'Магазин_тип списания' не найден")
+            names_str = "\n".join(f"— {n}" for n in attr_names) if attr_names else "атрибутов нет"
+            await msg.reply_text(
+                f"❌ Атрибут 'Магазин_тип списания' не найден.\n\n"
+                f"Доступные атрибуты списания:\n{names_str}\n\n"
+                f"Напишите мне точное название нужного атрибута."
+            )
+            set_st(ud, 'idle')
+            return
         ud['_shop_attr'] = attr
         entity_href = attr.get('customEntityMeta', {}).get('href', '')
         values = await moysklad.get_custom_entity_values(entity_href)
         ud['_shop_values'] = {v['id']: v for v in values}
     except Exception as e:
         logger.error(f"Shop type load error: {e}")
-        await msg.reply_text(f"❌ Ошибка загрузки Магазин_тип: {e}")
+        await msg.reply_text(f"❌ Ошибка загрузки атрибутов: {e}")
         set_st(ud, 'idle')
         return
 
