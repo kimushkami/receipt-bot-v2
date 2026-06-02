@@ -1,6 +1,9 @@
 import os
+import logging
 import httpx
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 BASE = 'https://api.moysklad.ru/api/remap/1.2'
 TIMEOUT = 30
@@ -29,7 +32,9 @@ async def _post(path: str, body: dict) -> dict:
 
 
 async def get_organizations() -> list[dict]:
-    return (await _get('/entity/organization', limit=100))['rows']
+    data = await _get('/entity/organization', limit=100)
+    logger.info(f"Organizations response keys: {list(data.keys())}, rows count: {len(data.get('rows', []))}")
+    return data.get('rows', [])
 
 
 async def get_stores() -> list[dict]:
@@ -80,13 +85,15 @@ async def create_loss(
         'organization': {'meta': {'href': org_href, 'type': 'organization', 'mediaType': 'application/json'}},
         'store':        {'meta': {'href': store_href, 'type': 'store', 'mediaType': 'application/json'}},
         'moment': moment,
-        'expenseItem':  {'meta': {'href': expense_href, 'type': 'expensearticle', 'mediaType': 'application/json'}},
+    if expense_href:
+        body['expenseItem'] = {'meta': {'href': expense_href, 'type': 'expensearticle', 'mediaType': 'application/json'}}
+    body.update({
         'attributes': [{
             'meta':  {'href': shop_attr_href, 'type': 'attributemetadata', 'mediaType': 'application/json'},
             'value': {'meta': {'href': shop_val_href, 'mediaType': 'application/json'}},
         }],
         'positions': [],
-    }
+    })
     for p in positions:
         if not p.get('product_href'):
             continue
