@@ -71,6 +71,12 @@ def _kb_settings() -> InlineKeyboardMarkup:
         [InlineKeyboardButton("🏪 Изменить склад", callback_data="settings:store")],
     ])
 
+def _kb_settings_done() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("⚙️ Изменить ещё", callback_data="settings:more")],
+        [InlineKeyboardButton("📸 Приступить к анализу", callback_data="settings:analyze")],
+    ])
+
 
 # ── SUMMARY ───────────────────────────────────────────────────────────────────
 
@@ -274,6 +280,15 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     state = st(ud)
 
     # Settings menu
+    if d == 'settings:more':
+        await q.edit_message_text("Что изменить?", reply_markup=_kb_settings())
+        return
+
+    if d == 'settings:analyze':
+        await q.edit_message_text("Отправьте фото чека.")
+        set_st(ud, 'idle')
+        return
+
     if d == 'settings:org':
         orgs = await moysklad.get_organizations()
         ud['_orgs'] = {o['id']: o for o in orgs}
@@ -316,7 +331,7 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await q.edit_message_text(
                 f"✅ Организация изменена: <b>{org['name']}</b>",
                 parse_mode='HTML',
-                reply_markup=_kb_settings()
+                reply_markup=_kb_settings_done()
             )
             set_st(ud, 'idle')
         else:
@@ -337,7 +352,7 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await q.edit_message_text(
                 f"✅ Склад изменён: <b>{store['name']}</b>",
                 parse_mode='HTML',
-                reply_markup=_kb_settings()
+                reply_markup=_kb_settings_done()
             )
             set_st(ud, 'idle')
         else:
