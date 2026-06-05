@@ -100,7 +100,7 @@ async def create_loss(
         'moment': moment,
         'attributes': [{
             'meta':  {'href': shop_attr_href, 'type': 'attributemetadata', 'mediaType': 'application/json'},
-            'value': {'meta': {'href': shop_val_href, 'mediaType': 'application/json'}},
+            'value': {'meta': {'href': shop_val_href, 'type': 'customentity', 'mediaType': 'application/json'}},
         }],
         'positions': [],
     }
