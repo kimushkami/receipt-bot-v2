@@ -446,6 +446,7 @@ async def _resolve_items(ud: dict):
             'found': product is not None,
             'product_name': product.get('name') if product else None,
             'product_href': product['meta']['href'] if product else None,
+            'product_type': product['meta'].get('type', 'product') if product else None,
             'uom_href': (product.get('uom') or {}).get('meta', {}).get('href') if product else None,
             'uom_name': (product.get('uom') or {}).get('name', '') if product else '',
         })
@@ -478,6 +479,7 @@ async def _create_document(msg, ud: dict, uid: int):
         unit_cost = (item['amount'] / qty / 1.3) if qty else 0
         positions.append({
             'product_href': item['product_href'],
+            'product_type': item.get('product_type', 'product'),
             'qty': qty,
             'unit_cost': unit_cost,
             'uom_href': item.get('uom_href'),
