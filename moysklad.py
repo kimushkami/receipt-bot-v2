@@ -110,7 +110,7 @@ async def create_loss(
         if not p.get('product_href'):
             continue
         pos = {
-            'assortment': {'meta': {'href': p['product_href'], 'mediaType': 'application/json'}},
+            'assortment': {'meta': {'href': p['product_href'], 'type': p.get('product_type', 'product'), 'mediaType': 'application/json'}},
             'quantity': p['qty'],
             'price': round(p['unit_cost'] * 100),  # МойСклад хранит цены в копейках
         }
