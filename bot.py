@@ -278,6 +278,7 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if d == 'settings:org':
         orgs = await moysklad.get_organizations()
         ud['_orgs'] = {o['id']: o for o in orgs}
+        ud['_settings_change'] = True
         await q.edit_message_text("Выберите организацию:", reply_markup=_kb(orgs, 'org'))
         set_st(ud, 'setup_org')
         return
@@ -285,13 +286,22 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if d == 'settings:store':
         stores = await moysklad.get_stores()
         ud['_stores'] = {s['id']: s for s in stores}
+        ud['_settings_change'] = True
         await q.edit_message_text("Выберите склад:", reply_markup=_kb(stores, 'store'))
         set_st(ud, 'setup_store')
         return
 
     if d == 'settings:expense':
-        articles = await moysklad.get_expense_articles()
+        try:
+            articles = await moysklad.get_expense_articles()
+        except Exception as e:
+            await q.edit_message_text(f"❌ Статьи расходов недоступны: {e}")
+            return
+        if not articles:
+            await q.edit_message_text("❌ Статьи расходов не найдены.")
+            return
         ud['_expenses'] = {a['id']: a for a in articles}
+        ud['_settings_change'] = True
         await q.edit_message_text("Выберите статью расходов:", reply_markup=_kb(articles, 'expense'))
         set_st(ud, 'setup_expense')
         return
@@ -301,10 +311,20 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         oid = d.split(':', 1)[1]
         org = ud['_orgs'][oid]
         storage.upsert_user(uid, org_name=org['name'], org_href=org['meta']['href'])
-        stores = await moysklad.get_stores()
-        ud['_stores'] = {s['id']: s for s in stores}
-        await q.edit_message_text("Выберите склад:", reply_markup=_kb(stores, 'store'))
-        set_st(ud, 'setup_store')
+        if ud.pop('_settings_change', False):
+            profile = storage.get_user(uid)
+            ud['profile'] = profile
+            await q.edit_message_text(
+                f"✅ Организация изменена: <b>{org['name']}</b>",
+                parse_mode='HTML',
+                reply_markup=_kb_settings()
+            )
+            set_st(ud, 'idle')
+        else:
+            stores = await moysklad.get_stores()
+            ud['_stores'] = {s['id']: s for s in stores}
+            await q.edit_message_text("Выберите склад:", reply_markup=_kb(stores, 'store'))
+            set_st(ud, 'setup_store')
         return
 
     # Setup: store chosen
@@ -312,25 +332,34 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         sid = d.split(':', 1)[1]
         store = ud['_stores'][sid]
         storage.upsert_user(uid, store_name=store['name'], store_href=store['meta']['href'])
-        profile = storage.get_user(uid)
-        if not profile.get('expense_href'):
-            try:
-                articles = await moysklad.get_expense_articles()
-                exp = next((a for a in articles if 'списани' in a['name'].lower()), articles[0] if articles else None)
-                if exp:
-                    storage.upsert_user(uid, expense_name=exp['name'], expense_href=exp['meta']['href'])
-            except Exception:
-                pass  # статьи расходов недоступны на данном тарифе
-        profile = storage.get_user(uid)
-        ud['profile'] = profile
-        await q.edit_message_text(
-            f"✅ Настройка сохранена!\n\n"
-            f"🏢 {profile['org_name']}\n"
-            f"🏪 {profile['store_name']}\n"
-            f"📂 {profile.get('expense_name', 'Списания')}\n\n"
-            f"Отправьте фото чека."
-        )
-        set_st(ud, 'idle')
+        if ud.pop('_settings_change', False):
+            profile = storage.get_user(uid)
+            ud['profile'] = profile
+            await q.edit_message_text(
+                f"✅ Склад изменён: <b>{store['name']}</b>",
+                parse_mode='HTML',
+                reply_markup=_kb_settings()
+            )
+            set_st(ud, 'idle')
+        else:
+            if not storage.get_user(uid).get('expense_href'):
+                try:
+                    articles = await moysklad.get_expense_articles()
+                    exp = next((a for a in articles if 'списани' in a['name'].lower()), articles[0] if articles else None)
+                    if exp:
+                        storage.upsert_user(uid, expense_name=exp['name'], expense_href=exp['meta']['href'])
+                except Exception:
+                    pass
+            profile = storage.get_user(uid)
+            ud['profile'] = profile
+            await q.edit_message_text(
+                f"✅ Настройка сохранена!\n\n"
+                f"🏢 {profile['org_name']}\n"
+                f"🏪 {profile['store_name']}\n"
+                f"📂 {profile.get('expense_name', 'Списания')}\n\n"
+                f"Отправьте фото чека."
+            )
+            set_st(ud, 'idle')
         return
 
     # Setup: expense chosen
@@ -340,9 +369,11 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         storage.upsert_user(uid, expense_name=exp['name'], expense_href=exp['meta']['href'])
         profile = storage.get_user(uid)
         ud['profile'] = profile
+        ud.pop('_settings_change', None)
         await q.edit_message_text(
-            f"✅ Статья расходов: <b>{exp['name']}</b>\n\nОтправьте фото чека.",
-            parse_mode='HTML'
+            f"✅ Статья расходов: <b>{exp['name']}</b>",
+            parse_mode='HTML',
+            reply_markup=_kb_settings()
         )
         set_st(ud, 'idle')
         return
