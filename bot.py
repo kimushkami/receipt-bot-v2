@@ -69,6 +69,7 @@ def _kb_settings() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🏢 Изменить организацию", callback_data="settings:org")],
         [InlineKeyboardButton("🏪 Изменить склад", callback_data="settings:store")],
+        [InlineKeyboardButton("🏬 Изменить отдел", callback_data="settings:group")],
     ])
 
 def _kb_settings_done() -> InlineKeyboardMarkup:
@@ -90,8 +91,9 @@ def _summary_text(ud: dict) -> str:
         "📋 <b>Сводка — Списание</b>", "",
         f"🏢 {profile.get('org_name', '—')}",
         f"🏪 {profile.get('store_name', '—')}",
+        f"🏬 Отдел: {profile.get('group_name', '—')}",
         f"📂 {profile.get('expense_name', 'Списания')}",
-        f"🏬 {shop.get('name', '—')}",
+        f"🛒 {shop.get('name', '—')}",
         f"📅 {moment.strftime('%d.%m.%Y')} 23:59",
         "", f"<b>Позиции ({len(items)}):</b>",
     ]
@@ -322,6 +324,14 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         set_st(ud, 'setup_store')
         return
 
+    if d == 'settings:group':
+        groups = await moysklad.get_groups()
+        ud['_groups'] = {g['id']: g for g in groups}
+        ud['_settings_change'] = True
+        await q.edit_message_text("Выберите отдел:", reply_markup=_kb(groups, 'group'))
+        set_st(ud, 'setup_group')
+        return
+
     if d == 'settings:expense':
         try:
             articles = await moysklad.get_expense_articles()
@@ -381,13 +391,34 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                         storage.upsert_user(uid, expense_name=exp['name'], expense_href=exp['meta']['href'])
                 except Exception:
                     pass
+            groups = await moysklad.get_groups()
+            ud['_groups'] = {g['id']: g for g in groups}
+            await q.edit_message_text("Выберите отдел:", reply_markup=_kb(groups, 'group'))
+            set_st(ud, 'setup_group')
+        return
+
+    # Setup: group chosen
+    if d.startswith('group:') and state == 'setup_group':
+        gid = d.split(':', 1)[1]
+        group = ud['_groups'][gid]
+        storage.upsert_user(uid, group_name=group['name'], group_href=group['meta']['href'])
+        if ud.pop('_settings_change', False):
+            profile = storage.get_user(uid)
+            ud['profile'] = profile
+            await q.edit_message_text(
+                f"✅ Отдел изменён: <b>{group['name']}</b>",
+                parse_mode='HTML',
+                reply_markup=_kb_settings_done()
+            )
+            set_st(ud, 'idle')
+        else:
             profile = storage.get_user(uid)
             ud['profile'] = profile
             await q.edit_message_text(
                 f"✅ Настройка сохранена!\n\n"
                 f"🏢 {profile['org_name']}\n"
                 f"🏪 {profile['store_name']}\n"
-                f"📂 {profile.get('expense_name', 'Списания')}\n\n"
+                f"🏬 {profile.get('group_name', '—')}\n\n"
                 f"Отправьте фото чека."
             )
             set_st(ud, 'idle')
@@ -565,6 +596,7 @@ async def _create_document(msg, ud: dict, uid: int):
             shop_attr_href=shop.get('attr_href', ''),
             shop_val_href=shop.get('val_href', ''),
             positions=positions,
+            group_href=profile.get('group_href') or '',
         )
         name = result.get('name', '—')
         doc_moment = result.get('moment', '')
