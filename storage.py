@@ -10,7 +10,8 @@ def init_db():
             user_id   INTEGER PRIMARY KEY,
             org_name  TEXT, org_href  TEXT,
             store_name TEXT, store_href TEXT,
-            expense_name TEXT, expense_href TEXT
+            expense_name TEXT, expense_href TEXT,
+            group_name TEXT, group_href TEXT
         )''')
 
 
