@@ -54,6 +54,10 @@ async def get_expense_articles() -> list[dict]:
     return (await _get('/entity/expensearticle', limit=100))['rows']
 
 
+async def get_groups() -> list[dict]:
+    return (await _get('/entity/group', limit=100))['rows']
+
+
 async def get_loss_shop_type_attr() -> tuple[Optional[dict], list[str]]:
     """Returns (attr, all_attr_names). attr is None if not found."""
     data = await _get('/entity/loss/metadata/attributes', limit=100)
@@ -93,6 +97,7 @@ async def create_loss(
     shop_attr_href: str,
     shop_val_href: str,
     positions: list[dict],
+    group_href: str = '',
 ) -> dict:
     body = {
         'organization': {'meta': {'href': org_href, 'type': 'organization', 'mediaType': 'application/json'}},
@@ -107,6 +112,8 @@ async def create_loss(
     }
     if expense_href:
         body['expenseItem'] = {'meta': {'href': expense_href, 'type': 'expensearticle', 'mediaType': 'application/json'}}
+    if group_href:
+        body['group'] = {'meta': {'href': group_href, 'type': 'group', 'mediaType': 'application/json'}}
     for p in positions:
         if not p.get('product_href'):
             continue
