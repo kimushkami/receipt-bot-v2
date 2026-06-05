@@ -69,7 +69,6 @@ def _kb_settings() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🏢 Изменить организацию", callback_data="settings:org")],
         [InlineKeyboardButton("🏪 Изменить склад", callback_data="settings:store")],
-        [InlineKeyboardButton("📂 Изменить статью расходов", callback_data="settings:expense")],
     ])
 
 
