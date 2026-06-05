@@ -138,6 +138,15 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await _setup_start_org(update.message, ctx.user_data)
 
 
+async def cmd_restart(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    ctx.user_data.clear()
+    storage.upsert_user(uid, org_name=None, org_href=None, store_name=None, store_href=None,
+                        expense_name=None, expense_href=None)
+    await update.message.reply_text("🔄 Данные сброшены. Начинаем заново.")
+    await _setup_start_org(update.message, ctx.user_data)
+
+
 async def cmd_settings(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     profile = storage.get_user(uid) or {}
@@ -580,6 +589,7 @@ def main():
     storage.init_db()
     app = Application.builder().token(TELEGRAM_TOKEN).build()
     app.add_handler(CommandHandler('start', cmd_start))
+    app.add_handler(CommandHandler('restart', cmd_restart))
     app.add_handler(CommandHandler('settings', cmd_settings))
     app.add_handler(CommandHandler('debug', cmd_debug))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
