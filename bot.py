@@ -126,6 +126,18 @@ async def _send_summary(msg, ud: dict, edit: bool = False):
 
 # ── SETUP ─────────────────────────────────────────────────────────────────────
 
+RULES_TEXT = (
+    "📸 <b>Как фотографировать чек:</b>\n"
+    "• Фото чёткое, весь текст хорошо читается\n"
+    "• Чек ровно в кадре — без наклона\n"
+    "• Лучший результат: чуть дальше с зумом 2x\n"
+    "• Если фото плохое — баркоды могут распознаться неверно, из-за чего товар не будет найден. Сделай хорошее фото 🙂\n\n"
+    "❌ <b>Если товар не найден:</b>\n"
+    "1. Сверь баркод в сводке с баркодом на чеке — бот мог ошибиться в цифре\n"
+    "2. Если баркоды совпадают — товар есть в кассе, но ещё не заведён в МойСклад. Дождись добавления и повтори списание"
+)
+
+
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     profile = storage.get_user(uid)
@@ -140,6 +152,7 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             f"Отправьте фото чека."
         )
     else:
+        await update.message.reply_text(RULES_TEXT, parse_mode='HTML')
         await _setup_start_org(update.message, ctx.user_data)
 
 
@@ -150,6 +163,10 @@ async def cmd_restart(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                         expense_name=None, expense_href=None)
     await update.message.reply_text("🔄 Данные сброшены. Начинаем заново.")
     await _setup_start_org(update.message, ctx.user_data)
+
+
+async def cmd_rules(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(RULES_TEXT, parse_mode='HTML')
 
 
 async def cmd_settings(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -636,6 +653,7 @@ def main():
     app.add_handler(CommandHandler('start', cmd_start))
     app.add_handler(CommandHandler('restart', cmd_restart))
     app.add_handler(CommandHandler('settings', cmd_settings))
+    app.add_handler(CommandHandler('rules', cmd_rules))
     app.add_handler(CommandHandler('debug', cmd_debug))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
