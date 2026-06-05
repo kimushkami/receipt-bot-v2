@@ -453,10 +453,22 @@ async def _resolve_items(ud: dict):
 
 
 async def _create_document(msg, ud: dict, uid: int):
-    profile = ud.get('profile') or storage.get_user(uid) or {}
+    profile = ud.get('profile') or {}
+    if not profile.get('org_href') or not profile.get('store_href'):
+        profile = storage.get_user(uid) or {}
     shop = ud.get('shop_type', {})
     moment: datetime = ud.get('moment', datetime.now().replace(hour=23, minute=59, second=0))
     items = ud.get('resolved_items', [])
+
+    if not profile.get('org_href') or not profile.get('store_href'):
+        await msg.reply_text(
+            "❌ Профиль неполный — не найдены org_href или store_href.\n"
+            f"Профиль: {profile}\n\n"
+            "Выполните /start заново для настройки.",
+            parse_mode='HTML'
+        )
+        set_st(ud, 'idle')
+        return
 
     positions = []
     for item in items:
@@ -475,7 +487,7 @@ async def _create_document(msg, ud: dict, uid: int):
         result = await moysklad.create_loss(
             org_href=profile['org_href'],
             store_href=profile['store_href'],
-            expense_href=profile.get('expense_href', ''),
+            expense_href=profile.get('expense_href') or '',
             moment=moment.strftime('%Y-%m-%d %H:%M:%S'),
             shop_attr_href=shop.get('attr_href', ''),
             shop_val_href=shop.get('val_href', ''),
