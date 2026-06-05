@@ -27,7 +27,16 @@ async def _get(url: str, **params) -> dict:
 async def _post(path: str, body: dict) -> dict:
     async with httpx.AsyncClient(timeout=TIMEOUT) as c:
         r = await c.post(f'{BASE}{path}', headers=_headers(), json=body)
-        r.raise_for_status()
+        if not r.is_success:
+            try:
+                err = r.json()
+                errors = err.get('errors', [{}])
+                msg = errors[0].get('error', r.text[:300])
+            except Exception:
+                msg = r.text[:300]
+            raise httpx.HTTPStatusError(
+                f"{r.status_code}: {msg}", request=r.request, response=r
+            )
         return r.json()
 
 
