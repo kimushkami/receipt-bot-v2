@@ -98,6 +98,7 @@ async def create_loss(
         'organization': {'meta': {'href': org_href, 'type': 'organization', 'mediaType': 'application/json'}},
         'store':        {'meta': {'href': store_href, 'type': 'store', 'mediaType': 'application/json'}},
         'moment': moment,
+        'shared': True,
         'attributes': [{
             'meta':  {'href': shop_attr_href, 'type': 'attributemetadata', 'mediaType': 'application/json'},
             'value': {'meta': {'href': shop_val_href, 'type': 'customentity', 'mediaType': 'application/json'}},
