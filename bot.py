@@ -10,7 +10,7 @@ from telegram.ext import (
 from dotenv import load_dotenv
 import storage
 import moysklad
-from analyzer import analyze_receipt_raw, analyze_receipt
+from analyzer import analyze_receipt_raw, analyze_receipt, reanalyze_barcode
 from formatter import is_weight_barcode
 
 load_dotenv()
@@ -69,7 +69,6 @@ def _kb_settings() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🏢 Изменить организацию", callback_data="settings:org")],
         [InlineKeyboardButton("🏪 Изменить склад", callback_data="settings:store")],
-        [InlineKeyboardButton("🏬 Изменить отдел", callback_data="settings:group")],
     ])
 
 def _kb_settings_done() -> InlineKeyboardMarkup:
@@ -91,9 +90,8 @@ def _summary_text(ud: dict) -> str:
         "📋 <b>Сводка — Списание</b>", "",
         f"🏢 {profile.get('org_name', '—')}",
         f"🏪 {profile.get('store_name', '—')}",
-        f"🏬 Отдел: {profile.get('group_name', '—')}",
         f"📂 {profile.get('expense_name', 'Списания')}",
-        f"🛒 {shop.get('name', '—')}",
+        f"🏬 {shop.get('name', '—')}",
         f"📅 {moment.strftime('%d.%m.%Y')} 23:59",
         "", f"<b>Позиции ({len(items)}):</b>",
     ]
@@ -259,6 +257,7 @@ async def _do_analyze(msg, bot, ud: dict, images: list[bytes]):
 
     await status.delete()
     ud['receipt_data'] = data
+    ud['images'] = images
 
     try:
         attr, attr_names = await moysklad.get_loss_shop_type_attr()
@@ -324,14 +323,6 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         set_st(ud, 'setup_store')
         return
 
-    if d == 'settings:group':
-        groups = await moysklad.get_groups()
-        ud['_groups'] = {g['id']: g for g in groups}
-        ud['_settings_change'] = True
-        await q.edit_message_text("Выберите отдел:", reply_markup=_kb(groups, 'group'))
-        set_st(ud, 'setup_group')
-        return
-
     if d == 'settings:expense':
         try:
             articles = await moysklad.get_expense_articles()
@@ -391,34 +382,13 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                         storage.upsert_user(uid, expense_name=exp['name'], expense_href=exp['meta']['href'])
                 except Exception:
                     pass
-            groups = await moysklad.get_groups()
-            ud['_groups'] = {g['id']: g for g in groups}
-            await q.edit_message_text("Выберите отдел:", reply_markup=_kb(groups, 'group'))
-            set_st(ud, 'setup_group')
-        return
-
-    # Setup: group chosen
-    if d.startswith('group:') and state == 'setup_group':
-        gid = d.split(':', 1)[1]
-        group = ud['_groups'][gid]
-        storage.upsert_user(uid, group_name=group['name'], group_href=group['meta']['href'])
-        if ud.pop('_settings_change', False):
-            profile = storage.get_user(uid)
-            ud['profile'] = profile
-            await q.edit_message_text(
-                f"✅ Отдел изменён: <b>{group['name']}</b>",
-                parse_mode='HTML',
-                reply_markup=_kb_settings_done()
-            )
-            set_st(ud, 'idle')
-        else:
             profile = storage.get_user(uid)
             ud['profile'] = profile
             await q.edit_message_text(
                 f"✅ Настройка сохранена!\n\n"
                 f"🏢 {profile['org_name']}\n"
                 f"🏪 {profile['store_name']}\n"
-                f"🏬 {profile.get('group_name', '—')}\n\n"
+                f"📂 {profile.get('expense_name', 'Списания')}\n\n"
                 f"Отправьте фото чека."
             )
             set_st(ud, 'idle')
@@ -527,9 +497,11 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def _resolve_items(ud: dict):
     items = ud.get('receipt_data', {}).get('items', [])
+    images = ud.get('images', [])
     resolved = []
     for item in items:
         barcode = str(item.get('barcode', '')).strip()
+        product_name_hint = str(item.get('name', '')).strip()
         qty_str = str(item.get('quantity', '1'))
         try:
             amount = float(item.get('amount', 0))
@@ -540,9 +512,29 @@ async def _resolve_items(ud: dict):
         display_barcode = barcode[:6] if is_weight else barcode
         qty = _qty_float(qty_str, is_weight)
 
-        product = await moysklad.find_by_barcode(display_barcode)
+        product = None
+        final_barcode = display_barcode
+        tried = {display_barcode}
+
+        for attempt in range(5):
+            product = await moysklad.find_by_barcode(final_barcode)
+            if product:
+                break
+            if not images:
+                break
+            new_barcode = await reanalyze_barcode(images, final_barcode, product_name_hint)
+            if not is_weight:
+                new_display = new_barcode
+            else:
+                new_display = new_barcode[:6]
+            if new_display in tried:
+                break
+            tried.add(new_display)
+            final_barcode = new_display
+            logger.info(f"Retry {attempt+1}: {display_barcode} → {final_barcode}")
+
         resolved.append({
-            'barcode': display_barcode,
+            'barcode': final_barcode,
             'qty': qty,
             'amount': amount,
             'found': product is not None,
@@ -596,7 +588,6 @@ async def _create_document(msg, ud: dict, uid: int):
             shop_attr_href=shop.get('attr_href', ''),
             shop_val_href=shop.get('val_href', ''),
             positions=positions,
-            group_href=profile.get('group_href') or '',
         )
         name = result.get('name', '—')
         doc_moment = result.get('moment', '')
