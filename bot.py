@@ -104,7 +104,7 @@ def _summary_text(ud: dict) -> str:
             uom = f" {item['uom_name']}" if item.get('uom_name') else ""
             qty = item['qty']
             qty_str = str(int(qty)) if qty == int(qty) else str(qty)
-            lines.append(f"✅ {item['product_name']} — {qty_str}{uom} — {_fmt(cost)} ₩")
+            lines.append(f"✅ <code>{item['barcode']}</code> — {qty_str}{uom} — {_fmt(cost)} ₩")
         else:
             lines.append(f"❌ Баркод <code>{item['barcode']}</code> не найден")
 
