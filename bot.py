@@ -104,7 +104,7 @@ def _summary_text(ud: dict) -> str:
             uom = f" {item['uom_name']}" if item.get('uom_name') else ""
             qty = item['qty']
             qty_str = str(int(qty)) if qty == int(qty) else str(qty)
-            lines.append(f"✅ <code>{item['barcode']}</code> — <code>{qty_str}{uom}</code> — <code>{_fmt(cost)}</code> ₩")
+            lines.append(f"✅ {item['product_name']} — {qty_str}{uom} — {_fmt(cost)} ₩")
         else:
             lines.append(f"❌ Баркод <code>{item['barcode']}</code> не найден")
 
@@ -213,9 +213,12 @@ async def handle_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ud = ctx.user_data
     msg = update.message
     mgid = msg.media_group_id
+    state = st(ud)
 
-    # Allow additional photos from the same media group while collecting
-    if st(ud) not in ('idle',) and not (st(ud) == 'collecting' and mgid and mgid in _media_groups):
+    if state not in ('idle', 'collecting'):
+        await msg.reply_text("⏳ Подождите, идёт обработка. Если бот завис — напишите /start")
+        return
+    if state == 'collecting' and not mgid:
         await msg.reply_text("⏳ Подождите, идёт обработка. Если бот завис — напишите /start")
         return
 
@@ -432,12 +435,8 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     # Confirm → create
     if d == 'confirm' and state == 'confirming':
-        try:
-            await q.edit_message_reply_markup(reply_markup=None)
-        except Exception:
-            pass
-        status = await q.message.reply_text("⏳ Создаю документ в МоёмСкладе...")
-        await _create_document(status, ud, uid)
+        await q.edit_message_text("⏳ Создаю документ в МоёмСкладе...")
+        await _create_document(q.message, ud, uid)
         return
 
     # Edit menu
@@ -527,7 +526,18 @@ async def _resolve_items(ud: dict):
             'uom_href': (product.get('uom') or {}).get('meta', {}).get('href') if product else None,
             'uom_name': (product.get('uom') or {}).get('name', '') if product else '',
         })
-    ud['resolved_items'] = resolved
+    # Merge duplicates by barcode
+    merged: dict = {}
+    order: list = []
+    for r in resolved:
+        key = r['barcode']
+        if key in merged:
+            merged[key]['qty'] += r['qty']
+            merged[key]['amount'] += r['amount']
+        else:
+            merged[key] = r.copy()
+            order.append(key)
+    ud['resolved_items'] = [merged[k] for k in order]
 
 
 async def _create_document(msg, ud: dict, uid: int):
@@ -585,11 +595,11 @@ async def _create_document(msg, ud: dict, uid: int):
         if not_found:
             text += f"\n\n⚠️ Не найдено в МоёмСкладе ({len(not_found)} поз.):\n"
             text += "\n".join(f"— <code>{i['barcode']}</code>" for i in not_found)
-        await msg.edit_text(text, parse_mode='HTML')
+        await msg.reply_text(text, parse_mode='HTML')
 
     except Exception as e:
         logger.error(f"Create loss error: {e}")
-        await msg.edit_text(f"❌ Ошибка создания документа:\n<code>{e}</code>", parse_mode='HTML')
+        await msg.reply_text(f"❌ Ошибка создания документа:\n<code>{e}</code>", parse_mode='HTML')
     finally:
         set_st(ud, 'idle')
 
