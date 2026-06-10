@@ -10,7 +10,7 @@ from telegram.ext import (
 from dotenv import load_dotenv
 import storage
 import moysklad
-from analyzer import analyze_receipt_raw, analyze_receipt, reanalyze_barcode
+from analyzer import analyze_receipt_raw, analyze_receipt
 from formatter import is_weight_barcode
 
 load_dotenv()
@@ -104,7 +104,7 @@ def _summary_text(ud: dict) -> str:
             uom = f" {item['uom_name']}" if item.get('uom_name') else ""
             qty = item['qty']
             qty_str = str(int(qty)) if qty == int(qty) else str(qty)
-            lines.append(f"✅ <code>{item['barcode']}</code> — {qty_str}{uom} — {_fmt(cost)} ₩")
+            lines.append(f"✅ <code>{item['barcode']}</code> — <code>{qty_str}{uom}</code> — <code>{_fmt(cost)}</code> ₩")
         else:
             lines.append(f"❌ Баркод <code>{item['barcode']}</code> не найден")
 
@@ -211,15 +211,17 @@ async def _setup_start_org(msg, ud: dict):
 
 async def handle_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ud = ctx.user_data
-    if st(ud) not in ('idle',):
-        await update.message.reply_text("⏳ Подождите, идёт обработка.")
+    msg = update.message
+    mgid = msg.media_group_id
+
+    # Allow additional photos from the same media group while collecting
+    if st(ud) not in ('idle',) and not (st(ud) == 'collecting' and mgid and mgid in _media_groups):
+        await msg.reply_text("⏳ Подождите, идёт обработка. Если бот завис — напишите /start")
         return
 
-    msg = update.message
     photo = msg.photo[-1]
     file = await ctx.bot.get_file(photo.file_id)
     image_bytes = bytes(await file.download_as_bytearray())
-    mgid = msg.media_group_id
 
     if mgid:
         if mgid not in _media_groups:
@@ -257,7 +259,6 @@ async def _do_analyze(msg, bot, ud: dict, images: list[bytes]):
 
     await status.delete()
     ud['receipt_data'] = data
-    ud['images'] = images
 
     try:
         attr, attr_names = await moysklad.get_loss_shop_type_attr()
@@ -431,8 +432,12 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     # Confirm → create
     if d == 'confirm' and state == 'confirming':
-        await q.edit_message_text("⏳ Создаю документ в МоёмСкладе...")
-        await _create_document(q.message, ud, uid)
+        try:
+            await q.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+        status = await q.message.reply_text("⏳ Создаю документ в МоёмСкладе...")
+        await _create_document(status, ud, uid)
         return
 
     # Edit menu
@@ -497,11 +502,9 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def _resolve_items(ud: dict):
     items = ud.get('receipt_data', {}).get('items', [])
-    images = ud.get('images', [])
     resolved = []
     for item in items:
         barcode = str(item.get('barcode', '')).strip()
-        product_name_hint = str(item.get('name', '')).strip()
         qty_str = str(item.get('quantity', '1'))
         try:
             amount = float(item.get('amount', 0))
@@ -512,29 +515,9 @@ async def _resolve_items(ud: dict):
         display_barcode = barcode[:6] if is_weight else barcode
         qty = _qty_float(qty_str, is_weight)
 
-        product = None
-        final_barcode = display_barcode
-        tried = {display_barcode}
-
-        for attempt in range(5):
-            product = await moysklad.find_by_barcode(final_barcode)
-            if product:
-                break
-            if not images:
-                break
-            new_barcode = await reanalyze_barcode(images, final_barcode, product_name_hint)
-            if not is_weight:
-                new_display = new_barcode
-            else:
-                new_display = new_barcode[:6]
-            if new_display in tried:
-                break
-            tried.add(new_display)
-            final_barcode = new_display
-            logger.info(f"Retry {attempt+1}: {display_barcode} → {final_barcode}")
-
+        product = await moysklad.find_by_barcode(display_barcode)
         resolved.append({
-            'barcode': final_barcode,
+            'barcode': display_barcode,
             'qty': qty,
             'amount': amount,
             'found': product is not None,
@@ -602,11 +585,11 @@ async def _create_document(msg, ud: dict, uid: int):
         if not_found:
             text += f"\n\n⚠️ Не найдено в МоёмСкладе ({len(not_found)} поз.):\n"
             text += "\n".join(f"— <code>{i['barcode']}</code>" for i in not_found)
-        await msg.reply_text(text, parse_mode='HTML')
+        await msg.edit_text(text, parse_mode='HTML')
 
     except Exception as e:
         logger.error(f"Create loss error: {e}")
-        await msg.reply_text(f"❌ Ошибка создания документа:\n<code>{e}</code>", parse_mode='HTML')
+        await msg.edit_text(f"❌ Ошибка создания документа:\n<code>{e}</code>", parse_mode='HTML')
     finally:
         set_st(ud, 'idle')
 
