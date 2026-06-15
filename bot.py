@@ -69,6 +69,7 @@ def _kb_settings() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🏢 Изменить организацию", callback_data="settings:org")],
         [InlineKeyboardButton("🏪 Изменить склад", callback_data="settings:store")],
+        [InlineKeyboardButton("🏬 Изменить отдел", callback_data="settings:group")],
     ])
 
 def _kb_settings_done() -> InlineKeyboardMarkup:
@@ -211,20 +212,15 @@ async def _setup_start_org(msg, ud: dict):
 
 async def handle_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ud = ctx.user_data
+    if st(ud) not in ('idle',):
+        await update.message.reply_text("⏳ Подождите, идёт обработка.")
+        return
+
     msg = update.message
-    mgid = msg.media_group_id
-    state = st(ud)
-
-    if state not in ('idle', 'collecting'):
-        await msg.reply_text("⏳ Подождите, идёт обработка. Если бот завис — напишите /start")
-        return
-    if state == 'collecting' and not mgid:
-        await msg.reply_text("⏳ Подождите, идёт обработка. Если бот завис — напишите /start")
-        return
-
     photo = msg.photo[-1]
     file = await ctx.bot.get_file(photo.file_id)
     image_bytes = bytes(await file.download_as_bytearray())
+    mgid = msg.media_group_id
 
     if mgid:
         if mgid not in _media_groups:
@@ -311,6 +307,14 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         set_st(ud, 'idle')
         return
 
+    if d == 'settings:group':
+        groups = await moysklad.get_groups()
+        ud['_groups'] = {g['id']: g for g in groups}
+        ud['_settings_change'] = True
+        await q.edit_message_text("Выберите ваш отдел:", reply_markup=_kb(groups, 'group'))
+        set_st(ud, 'setup_group')
+        return
+
     if d == 'settings:org':
         orgs = await moysklad.get_organizations()
         ud['_orgs'] = {o['id']: o for o in orgs}
@@ -386,13 +390,34 @@ async def handle_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                         storage.upsert_user(uid, expense_name=exp['name'], expense_href=exp['meta']['href'])
                 except Exception:
                     pass
+            groups = await moysklad.get_groups()
+            ud['_groups'] = {g['id']: g for g in groups}
+            await q.edit_message_text("Выберите ваш отдел:", reply_markup=_kb(groups, 'group'))
+            set_st(ud, 'setup_group')
+        return
+
+    # Setup: group chosen
+    if d.startswith('group:') and state == 'setup_group':
+        gid = d.split(':', 1)[1]
+        group = ud['_groups'][gid]
+        storage.upsert_user(uid, group_name=group['name'], group_href=group['meta']['href'])
+        if ud.pop('_settings_change', False):
+            profile = storage.get_user(uid)
+            ud['profile'] = profile
+            await q.edit_message_text(
+                f"✅ Отдел изменён: <b>{group['name']}</b>",
+                parse_mode='HTML',
+                reply_markup=_kb_settings_done()
+            )
+            set_st(ud, 'idle')
+        else:
             profile = storage.get_user(uid)
             ud['profile'] = profile
             await q.edit_message_text(
                 f"✅ Настройка сохранена!\n\n"
                 f"🏢 {profile['org_name']}\n"
                 f"🏪 {profile['store_name']}\n"
-                f"📂 {profile.get('expense_name', 'Списания')}\n\n"
+                f"🏬 {profile.get('group_name', '—')}\n\n"
                 f"Отправьте фото чека."
             )
             set_st(ud, 'idle')
@@ -526,18 +551,7 @@ async def _resolve_items(ud: dict):
             'uom_href': (product.get('uom') or {}).get('meta', {}).get('href') if product else None,
             'uom_name': (product.get('uom') or {}).get('name', '') if product else '',
         })
-    # Merge duplicates by barcode
-    merged: dict = {}
-    order: list = []
-    for r in resolved:
-        key = r['barcode']
-        if key in merged:
-            merged[key]['qty'] += r['qty']
-            merged[key]['amount'] += r['amount']
-        else:
-            merged[key] = r.copy()
-            order.append(key)
-    ud['resolved_items'] = [merged[k] for k in order]
+    ud['resolved_items'] = resolved
 
 
 async def _create_document(msg, ud: dict, uid: int):
@@ -581,6 +595,7 @@ async def _create_document(msg, ud: dict, uid: int):
             shop_attr_href=shop.get('attr_href', ''),
             shop_val_href=shop.get('val_href', ''),
             positions=positions,
+            group_href=profile.get('group_href') or '',
         )
         name = result.get('name', '—')
         doc_moment = result.get('moment', '')
