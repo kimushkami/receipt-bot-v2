@@ -50,12 +50,12 @@ async def get_stores() -> list[dict]:
     return (await _get('/entity/store', limit=100))['rows']
 
 
-async def get_expense_articles() -> list[dict]:
-    return (await _get('/entity/expensearticle', limit=100))['rows']
-
-
 async def get_groups() -> list[dict]:
     return (await _get('/entity/group', limit=100))['rows']
+
+
+async def get_expense_articles() -> list[dict]:
+    return (await _get('/entity/expensearticle', limit=100))['rows']
 
 
 async def get_loss_shop_type_attr() -> tuple[Optional[dict], list[str]]:
